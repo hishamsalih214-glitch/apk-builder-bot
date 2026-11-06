@@ -1,0 +1,60 @@
+name: Build Android APK from Telegram
+
+on:
+  repository_dispatch:
+    types: [start_apk_build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies for Buildozer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            zip \
+            unzip \
+            openjdk-17-jdk \
+            python3-pip \
+            autoconf \
+            libtool \
+            pkg-config \
+            zlib1g-dev \
+            libncurses5-dev \
+            libncursesw5-dev \
+            libtinfo5 \
+            libffi-dev \
+            libssl-dev
+          pip install --upgrade pip
+          pip install buildozer cython
+
+      - name: Build APK with Buildozer
+        run: |
+          buildozer -v android debug
+
+      - name: Upload APK to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          APK_FILE=$(find bin/ -name "*.apk" | head -n 1)
+          if [ -f "$APK_FILE" ]; then
+            echo "Found APK: $APK_FILE"
+            curl -F chat_id="$TELEGRAM_CHAT_ID" \
+                 -F document=@"$APK_FILE" \
+                 -F caption="🎉 تم بناء تطبيق الـ APK بنجاح عبر GitHub Actions!" \
+                 "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/sendDocument"
+          else
+            echo "Error: APK file not found!"
+            exit 1
+          fi
